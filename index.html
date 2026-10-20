@@ -62,14 +62,18 @@ main { max-width: 480px; margin: auto; padding: 12px; }
   <div id="viewAuth" class="card">
     <h3 style="text-align:center; margin-bottom:10px;">Akses Admin Pusat</h3>
     <input type="text" id="adminUserInput" class="input-box" value="Admin" placeholder="Username Admin">
-    <input type="password" id="adminPassInput" class="input-box" value="081933Ae" placeholder="Password Admin">
+    
+    <!-- WRAPPER PASSWORD DENGAN FITUR LIHAT/SEMBUNYI -->
+    <div style="position: relative; width: 100%; margin-bottom: 8px;">
+      <input type="password" id="adminPassInput" class="input-box" value="081933Ae" placeholder="Password Admin" style="margin-bottom: 0; padding-right: 40px;">
+      <span onclick="toggleAdminPass()" style="position: absolute; right: 12px; top: 10px; cursor: pointer; font-size: 16px;" id="adminEyeIcon">👁️</span>
+    </div>
+
     <button class="btn btn-green" onclick="processAdminLogin()">Masuk Dasbor Admin</button>
   </div>
 
   <!-- DASBOR ADMIN -->
   <div id="viewAdmin" style="display:none;">
-    
-    <!-- STATISTIK RINGKASAN ARUS KAS (PEMASUKAN / PENGELUARAN / SALDO) -->
     <div class="stat-grid">
       <div class="stat-card">
         <span style="font-size:9px; color:var(--text-dim);">Pemasukan (+)</span>
@@ -85,7 +89,6 @@ main { max-width: 480px; margin: auto; padding: 12px; }
       </div>
     </div>
 
-    <!-- FORM INPUT KAS KELUAR / MASUK MANUAL -->
     <div class="card" style="border:1.5px solid var(--blue-primary);">
       <h4 style="color:#38bdf8; margin-bottom:6px;">💰 Catat Arus Kas Manual (+ / -)</h4>
       <input type="text" id="cashflowDescInput" class="input-box" placeholder="Keterangan (cth: Cetak Banner / Promo)">
@@ -96,19 +99,16 @@ main { max-width: 480px; margin: auto; padding: 12px; }
       </div>
     </div>
 
-    <!-- RIWAYAT ARUS KAS KEUANGAN -->
     <div class="card" style="border:1.5px solid #334155;">
       <h4 style="color:#38bdf8; margin-bottom:6px;">📜 Jurnal Buku Kas Keuangan</h4>
       <div id="cashflowHistoryList" style="max-height:180px; overflow-y:auto;">Memuat riwayat kas...</div>
     </div>
 
-    <!-- VERIFIKASI BUKTI STRUK TOP UP -->
     <div class="card" style="border:1.5px solid var(--green); background:#064e3b;">
       <h4 style="color:#dcfce7; margin-bottom:6px;">📥 Permohonan Top Up Saldo Dompetku / Deposit</h4>
       <div id="adminTopupList" style="font-size:12px;">Memuat data permohonan...</div>
     </div>
 
-    <!-- FITUR MANAJEMEN SALDO MANUAL (TOP UP / UNSUSPEND) -->
     <div class="card" style="border:1.5px solid #38bdf8;">
       <h4 style="color:#38bdf8; margin-bottom:6px;">💳 Kelola Saldo / Unsuspend Manual</h4>
       <input type="text" id="targetUserInput" class="input-box" placeholder="Masukkan Username Target (Driver / Pelanggan)">
@@ -119,18 +119,15 @@ main { max-width: 480px; margin: auto; padding: 12px; }
       </div>
     </div>
 
-    <!-- REKAP PENGGUNA & STATUS BLOKIR -->
     <div class="card" style="border:1.5px solid #334155;">
       <h4 style="color:#38bdf8; margin-bottom:6px;">📋 Daftar Pengguna & Mitra Driver</h4>
       <div id="adminUserList" style="font-size:12px; max-height:180px; overflow-y:auto;">Memuat daftar pengguna...</div>
     </div>
 
-    <!-- PETA TRACKING DRIVER REAL-TIME -->
     <div class="card" style="border:1.5px solid var(--blue-primary);">
       <h4 style="color:#38bdf8; margin-bottom:6px;">🗺️ Peta Live Tracking Real-Time Driver</h4>
       <div id="adminLiveMap"></div>
     </div>
-
   </div>
 </main>
 
@@ -141,6 +138,13 @@ if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 const db = firebase.database();
 
 let adminLiveMap = null, adminMarkers = {};
+
+function toggleAdminPass() {
+  const p = document.getElementById('adminPassInput');
+  const icon = document.getElementById('adminEyeIcon');
+  if (p.type === 'password') { p.type = 'text'; icon.innerText = '🙈'; }
+  else { p.type = 'password'; icon.innerText = '👁️'; }
+}
 
 function processAdminLogin() {
   const u = document.getElementById('adminUserInput').value.trim();
@@ -154,27 +158,12 @@ function processAdminLogin() {
 }
 
 function loadAdminData() {
-  // Riwayat Arus Kas Keuangan
   db.ref('cashflow').on('value', (snap) => {
     let logs = snap.val() ? Object.values(snap.val()).reverse() : [];
     let totalIn = 0, totalOut = 0;
-
     let html = logs.length ? logs.map(l => {
-      if (l.type === 'IN') totalIn += l.amount;
-      else totalOut += l.amount;
-
-      let typeClass = l.type === 'IN' ? 'income' : 'expense';
-      let typeSign = l.type === 'IN' ? '+' : '-';
-
-      return `
-        <div class="cashflow-item">
-          <div>
-            <b>${l.desc}</b><br>
-            <span style="color:var(--text-dim); font-size:9px;">${l.createdAt}</span>
-          </div>
-          <div class="${typeClass}">${typeSign} Rp ${l.amount.toLocaleString('id-ID')}</div>
-        </div>
-      `;
+      if (l.type === 'IN') totalIn += l.amount; else totalOut += l.amount;
+      return `<div class="cashflow-item"><div><b>${l.desc}</b><br><span style="color:var(--text-dim); font-size:9px;">${l.createdAt}</span></div><div class="${l.type === 'IN' ? 'income' : 'expense'}">${l.type === 'IN' ? '+' : '-'} Rp ${l.amount.toLocaleString('id-ID')}</div></div>`;
     }).join('') : "<div style='font-size:11px; color:var(--text-dim);'>Belum ada catatan arus kas.</div>";
 
     document.getElementById('cashflowHistoryList').innerHTML = html;
@@ -182,41 +171,27 @@ function loadAdminData() {
     document.getElementById('totalExpenseDisplay').innerText = "Rp " + totalOut.toLocaleString('id-ID');
     let netKas = totalIn - totalOut;
     document.getElementById('netKasDisplay').innerText = (netKas < 0 ? "-Rp " : "Rp ") + Math.abs(netKas).toLocaleString('id-ID');
-    document.getElementById('netKasDisplay').style.color = netKas < 0 ? 'var(--red)' : 'var(--green)';
   });
 
-  // Permohonan Top Up
   db.ref('topupRequests').on('value', (snap) => {
     let topups = snap.val() ? Object.values(snap.val()).reverse() : [];
-    let pendingTopups = topups.filter(t => t.status === 'PENDING');
-    document.getElementById('adminTopupList').innerHTML = pendingTopups.length ? pendingTopups.map(t => `
+    let pending = topups.filter(t => t.status === 'PENDING');
+    document.getElementById('adminTopupList').innerHTML = pending.length ? pending.map(t => `
       <div style="border:1px solid #334155; border-radius:10px; padding:8px; margin-bottom:8px; background:#0f172a;">
-        <b>👤 ${t.customerName} (${t.customerUrut})</b> — <b style="color:var(--green);">Rp ${t.amount.toLocaleString('id-ID')}</b><br>
-        <small style="color:var(--text-dim);">Waktu: ${t.createdAt}</small><br>
-        <div style="margin: 6px 0;">
-          <img src="${t.strukImg}" style="max-width:100%; height:100px; border-radius:6px; object-fit:contain; border:1px solid #334155;"><br>
-          <small style="color:#38bdf8; font-weight:bold;">🧾 Struk Super-Compressed (&lt;15KB)</small>
-        </div>
+        <b>👤 ${t.customerName}</b> — <b style="color:var(--green);">Rp ${t.amount.toLocaleString('id-ID')}</b><br>
+        <img src="${t.strukImg}" style="max-width:100%; height:80px; border-radius:6px; object-fit:contain; margin:4px 0;"><br>
         <button class="btn btn-green" style="padding:6px; font-size:11px; margin:0;" onclick="adminApproveTopup('${t.id}', '${t.customerId}', ${t.amount})">✅ Konfirmasi & Isi Saldo</button>
       </div>
     `).join('') : "Belum ada permohonan top up pending.";
   });
 
-  // Rekap Pengguna & Saldo
   db.ref('users').on('value', (snap) => {
     let users = snap.val() ? Object.values(snap.val()) : [];
     db.ref('wallets').once('value', (walSnap) => {
       let wallets = walSnap.val() || {};
       document.getElementById('adminUserList').innerHTML = users.length ? users.map(u => {
         let bal = wallets[u.username] || 0;
-        let isSuspended = u.role === 'driver' && bal <= -25000;
-        let statusBadge = isSuspended ? '<b style="color:var(--red);">[SUSPENDED]</b>' : '<b style="color:var(--green);">[AKTIF]</b>';
-        return `
-          <div style="border-bottom:1px solid #334155; padding:6px 0;">
-            👤 <b>${u.username}</b> (${u.role}) ${statusBadge}<br>
-            Plat: <b>${u.platNomor || '-'}</b> | Saldo: <b style="color:${bal < 0 ? 'var(--red)' : 'var(--green)'}">Rp ${bal.toLocaleString('id-ID')}</b>
-          </div>
-        `;
+        return `<div style="border-bottom:1px solid #334155; padding:6px 0;">👤 <b>${u.username}</b> (${u.role}) | Saldo: <b style="color:${bal < 0 ? 'var(--red)' : 'var(--green)'}">Rp ${bal.toLocaleString('id-ID')}</b></div>`;
       }).join('') : "Belum ada pengguna terdaftar.";
     });
   });
@@ -225,20 +200,10 @@ function loadAdminData() {
 function recordCashflow(type) {
   let desc = document.getElementById('cashflowDescInput').value.trim();
   let amount = parseInt(document.getElementById('cashflowAmountInput').value);
-
-  if (!desc || !amount || amount <= 0) return alert("Isi Keterangan dan Nominal yang Valid!");
-
+  if (!desc || !amount || amount <= 0) return alert("Isi Keterangan dan Nominal Valid!");
   const logId = "CF-" + Date.now().toString().slice(-6);
-  const logData = {
-    id: logId,
-    desc: desc,
-    amount: amount,
-    type: type,
-    createdAt: new Date().toLocaleString("id-ID")
-  };
-
-  db.ref('cashflow/' + logId).set(logData, () => {
-    alert(`✅ Catatan Arus Kas (${type === 'IN' ? 'Pemasukan' : 'Pengeluaran'}) Berhasil Disimpan!`);
+  db.ref('cashflow/' + logId).set({ id: logId, desc, amount, type, createdAt: new Date().toLocaleString("id-ID") }, () => {
+    alert("Catatan Arus Kas Berhasil Disimpan!");
     document.getElementById('cashflowDescInput').value = "";
     document.getElementById('cashflowAmountInput').value = "";
   });
@@ -250,10 +215,8 @@ function adminApproveTopup(topupId, custId, amount) {
     db.ref('wallets/' + custId).set(currentBal + amount, () => {
       db.ref('topupRequests/' + topupId).update({ status: 'APPROVED' }, () => {
         const logId = "CF-" + Date.now().toString().slice(-6);
-        db.ref('cashflow/' + logId).set({
-          id: logId, desc: `Top Up Saldo (${custId})`, amount: amount, type: 'IN', createdAt: new Date().toLocaleString("id-ID")
-        });
-        alert("Top Up Berhasil Dikonfirmasi! Saldo & Buku Kas Diperbarui.");
+        db.ref('cashflow/' + logId).set({ id: logId, desc: `Top Up Saldo (${custId})`, amount, type: 'IN', createdAt: new Date().toLocaleString("id-ID") });
+        alert("Top Up Dikonfirmasi!");
       });
     });
   });
@@ -262,19 +225,12 @@ function adminApproveTopup(topupId, custId, amount) {
 function adjustBalanceManual(type) {
   let targetUser = document.getElementById('targetUserInput').value.trim();
   let amount = parseInt(document.getElementById('manualAmountInput').value);
-
-  if (!targetUser || !amount || amount <= 0) return alert("Isi Username Target dan Nominal yang Valid!");
-
+  if (!targetUser || !amount || amount <= 0) return alert("Isi Username Target dan Nominal Valid!");
   db.ref('wallets/' + targetUser).once('value', (snap) => {
     let currentBal = snap.val() || 0;
     let newBal = type === 'ADD' ? (currentBal + amount) : (currentBal - amount);
-
     db.ref('wallets/' + targetUser).set(newBal, () => {
-      const logId = "CF-" + Date.now().toString().slice(-6);
-      db.ref('cashflow/' + logId).set({
-        id: logId, desc: `Penyesuaian Saldo (${targetUser})`, amount: amount, type: type === 'ADD' ? 'IN' : 'OUT', createdAt: new Date().toLocaleString("id-ID")
-      });
-      alert(`✅ Saldo ${targetUser} Berhasil Diperbarui!\nSaldo Baru: Rp ${newBal.toLocaleString('id-ID')}`);
+      alert(`Saldo Berhasil Diperbarui Menjadi: Rp ${newBal.toLocaleString('id-ID')}`);
       document.getElementById('manualAmountInput').value = "";
     });
   });
@@ -284,15 +240,14 @@ function initAdminLiveMap() {
   if (adminLiveMap) return;
   adminLiveMap = L.map('adminLiveMap').setView([-7.5463, 112.2338], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminLiveMap);
-
   db.ref('activeDrivers').on('value', (snap) => {
     let drivers = snap.val() || {};
     Object.entries(drivers).forEach(([id, d]) => {
       let markerKey = 'driver_' + id;
       if (adminMarkers[markerKey]) { adminMarkers[markerKey].setLatLng([d.lat, d.lng]); } 
       else {
-        let driverIcon = L.divIcon({ html: '🛵<br><b>' + d.driverId + '</b>', iconSize: [40, 40] });
-        adminMarkers[markerKey] = L.marker([d.lat, d.lng], { icon: driverIcon }).addTo(adminLiveMap).bindPopup("Mitra Driver: " + d.driverName);
+        let icon = L.divIcon({ html: '🛵<br><b>' + d.driverId + '</b>', iconSize: [40, 40] });
+        adminMarkers[markerKey] = L.marker([d.lat, d.lng], { icon }).addTo(adminLiveMap).bindPopup("Driver: " + d.driverName);
       }
     });
   });
