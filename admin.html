@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mas Tolong — Admin Pusat & Keuangan</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<style>
+:root { 
+  --blue-primary: #0264c8; 
+  --bg: #0f172a; 
+  --card-bg: #1e293b;
+  --text: #f8fafc; 
+  --text-dim: #94a3b8;
+  --green: #10b981; 
+  --red: #ef4444; 
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+body { background: var(--bg); color: var(--text); padding-bottom: 40px; }
+
+header { background: #1e293b; color: white; padding: 12px 16px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+.header-title { font-size: 15px; font-weight: bold; }
+
+main { max-width: 480px; margin: auto; padding: 12px; }
+.card { background: var(--card-bg); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+#adminLiveMap { height: 240px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #334155; }
+
+.btn { width: 100%; padding: 10px; border: none; border-radius: 10px; font-weight: bold; font-size: 13px; cursor: pointer; margin-bottom: 4px; }
+.btn-green { background: var(--green); color: white; }
+.btn-red { background: var(--red); color: white; }
+.btn-blue { background: var(--blue-primary); color: white; }
+.input-box { width: 100%; padding: 10px; border: 1px solid #334155; border-radius: 10px; font-size: 13px; margin-bottom: 8px; background: #0f172a; color: white; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+.stat-card { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 8px; text-align: center; }
+.stat-val { font-size: 13px; font-weight: bold; margin-top: 2px; }
+
+.cashflow-item { border-bottom: 1px solid #334155; padding: 6px 0; display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+.income { color: var(--green); font-weight: bold; }
+.expense { color: var(--red); font-weight: bold; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-title">🛡️ MAS TOLONG ADMIN PUSAT</div>
+    <div style="font-size:10px; color:var(--text-dim);">Sistem Kontrol Transaksi & Arus Kas Keuangan</div>
+  </div>
+  <button id="btnLogout" class="btn btn-red" style="width:auto; padding:4px 10px; font-size:11px; margin:0; display:none;" onclick="location.reload()">Log Out 🚪</button>
+</header>
+
+<main>
+  <!-- AUTH / LOGIN ADMIN -->
+  <div id="viewAuth" class="card">
+    <h3 style="text-align:center; margin-bottom:10px;">Akses Admin Pusat</h3>
+    <input type="text" id="adminUserInput" class="input-box" value="Admin" placeholder="Username Admin">
+    <input type="password" id="adminPassInput" class="input-box" value="081933Ae" placeholder="Password Admin">
+    <button class="btn btn-green" onclick="processAdminLogin()">Masuk Dasbor Admin</button>
+  </div>
+
+  <!-- DASBOR ADMIN -->
+  <div id="viewAdmin" style="display:none;">
+    
+    <!-- STATISTIK RINGKASAN ARUS KAS (PEMASUKAN / PENGELUARAN / SALDO) -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span style="font-size:9px; color:var(--text-dim);">Pemasukan (+)</span>
+        <div class="stat-val income" id="totalIncomeDisplay">Rp 0</div>
+      </div>
+      <div class="stat-card">
+        <span style="font-size:9px; color:var(--text-dim);">Pengeluaran (-)</span>
+        <div class="stat-val expense" id="totalExpenseDisplay">Rp 0</div>
+      </div>
+      <div class="stat-card">
+        <span style="font-size:9px; color:var(--text-dim);">Saldo Bersih Kas</span>
+        <div class="stat-val" id="netKasDisplay" style="color:#38bdf8;">Rp 0</div>
+      </div>
+    </div>
+
+    <!-- FORM INPUT KAS KELUAR / MASUK MANUAL -->
+    <div class="card" style="border:1.5px solid var(--blue-primary);">
+      <h4 style="color:#38bdf8; margin-bottom:6px;">💰 Catat Arus Kas Manual (+ / -)</h4>
+      <input type="text" id="cashflowDescInput" class="input-box" placeholder="Keterangan (cth: Cetak Banner / Promo)">
+      <input type="number" id="cashflowAmountInput" class="input-box" placeholder="Nominal Rp (cth: 25000)">
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-green" onclick="recordCashflow('IN')">➕ Pemasukan (+)</button>
+        <button class="btn btn-red" onclick="recordCashflow('OUT')">➖ Pengeluaran (-)</button>
+      </div>
+    </div>
+
+    <!-- RIWAYAT ARUS KAS KEUANGAN -->
+    <div class="card" style="border:1.5px solid #334155;">
+      <h4 style="color:#38bdf8; margin-bottom:6px;">📜 Jurnal Buku Kas Keuangan</h4>
+      <div id="cashflowHistoryList" style="max-height:180px; overflow-y:auto;">Memuat riwayat kas...</div>
+    </div>
+
+    <!-- VERIFIKASI BUKTI STRUK TOP UP -->
+    <div class="card" style="border:1.5px solid var(--green); background:#064e3b;">
+      <h4 style="color:#dcfce7; margin-bottom:6px;">📥 Permohonan Top Up Saldo Dompetku / Deposit</h4>
+      <div id="adminTopupList" style="font-size:12px;">Memuat data permohonan...</div>
+    </div>
+
+    <!-- FITUR MANAJEMEN SALDO MANUAL (TOP UP / UNSUSPEND) -->
+    <div class="card" style="border:1.5px solid #38bdf8;">
+      <h4 style="color:#38bdf8; margin-bottom:6px;">💳 Kelola Saldo / Unsuspend Manual</h4>
+      <input type="text" id="targetUserInput" class="input-box" placeholder="Masukkan Username Target (Driver / Pelanggan)">
+      <input type="number" id="manualAmountInput" class="input-box" placeholder="Nominal Saldo (cth: 50000)">
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-green" onclick="adjustBalanceManual('ADD')">➕ Tambah Saldo</button>
+        <button class="btn btn-red" onclick="adjustBalanceManual('SUBTRACT')">➖ Potong Saldo</button>
+      </div>
+    </div>
+
+    <!-- REKAP PENGGUNA & STATUS BLOKIR -->
+    <div class="card" style="border:1.5px solid #334155;">
+      <h4 style="color:#38bdf8; margin-bottom:6px;">📋 Daftar Pengguna & Mitra Driver</h4>
+      <div id="adminUserList" style="font-size:12px; max-height:180px; overflow-y:auto;">Memuat daftar pengguna...</div>
+    </div>
+
+    <!-- PETA TRACKING DRIVER REAL-TIME -->
+    <div class="card" style="border:1.5px solid var(--blue-primary);">
+      <h4 style="color:#38bdf8; margin-bottom:6px;">🗺️ Peta Live Tracking Real-Time Driver</h4>
+      <div id="adminLiveMap"></div>
+    </div>
+
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const firebaseConfig = { databaseURL: "https://mas-tolong-default-rtdb.asia-southeast1.firebasedatabase.app" };
+if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+const db = firebase.database();
+
+let adminLiveMap = null, adminMarkers = {};
+
+function processAdminLogin() {
+  const u = document.getElementById('adminUserInput').value.trim();
+  const p = document.getElementById('adminPassInput').value.trim();
+  if (u === 'Admin' && p === '081933Ae') {
+    document.getElementById('viewAuth').style.display = 'none';
+    document.getElementById('viewAdmin').style.display = 'block';
+    document.getElementById('btnLogout').style.display = 'block';
+    setTimeout(() => { initAdminLiveMap(); loadAdminData(); }, 300);
+  } else { alert("❌ Username atau Password Admin Salah!"); }
+}
+
+function loadAdminData() {
+  // Riwayat Arus Kas Keuangan
+  db.ref('cashflow').on('value', (snap) => {
+    let logs = snap.val() ? Object.values(snap.val()).reverse() : [];
+    let totalIn = 0, totalOut = 0;
+
+    let html = logs.length ? logs.map(l => {
+      if (l.type === 'IN') totalIn += l.amount;
+      else totalOut += l.amount;
+
+      let typeClass = l.type === 'IN' ? 'income' : 'expense';
+      let typeSign = l.type === 'IN' ? '+' : '-';
+
+      return `
+        <div class="cashflow-item">
+          <div>
+            <b>${l.desc}</b><br>
+            <span style="color:var(--text-dim); font-size:9px;">${l.createdAt}</span>
+          </div>
+          <div class="${typeClass}">${typeSign} Rp ${l.amount.toLocaleString('id-ID')}</div>
+        </div>
+      `;
+    }).join('') : "<div style='font-size:11px; color:var(--text-dim);'>Belum ada catatan arus kas.</div>";
+
+    document.getElementById('cashflowHistoryList').innerHTML = html;
+    document.getElementById('totalIncomeDisplay').innerText = "Rp " + totalIn.toLocaleString('id-ID');
+    document.getElementById('totalExpenseDisplay').innerText = "Rp " + totalOut.toLocaleString('id-ID');
+    let netKas = totalIn - totalOut;
+    document.getElementById('netKasDisplay').innerText = (netKas < 0 ? "-Rp " : "Rp ") + Math.abs(netKas).toLocaleString('id-ID');
+    document.getElementById('netKasDisplay').style.color = netKas < 0 ? 'var(--red)' : 'var(--green)';
+  });
+
+  // Permohonan Top Up
+  db.ref('topupRequests').on('value', (snap) => {
+    let topups = snap.val() ? Object.values(snap.val()).reverse() : [];
+    let pendingTopups = topups.filter(t => t.status === 'PENDING');
+    document.getElementById('adminTopupList').innerHTML = pendingTopups.length ? pendingTopups.map(t => `
+      <div style="border:1px solid #334155; border-radius:10px; padding:8px; margin-bottom:8px; background:#0f172a;">
+        <b>👤 ${t.customerName} (${t.customerUrut})</b> — <b style="color:var(--green);">Rp ${t.amount.toLocaleString('id-ID')}</b><br>
+        <small style="color:var(--text-dim);">Waktu: ${t.createdAt}</small><br>
+        <div style="margin: 6px 0;">
+          <img src="${t.strukImg}" style="max-width:100%; height:100px; border-radius:6px; object-fit:contain; border:1px solid #334155;"><br>
+          <small style="color:#38bdf8; font-weight:bold;">🧾 Struk Super-Compressed (&lt;15KB)</small>
+        </div>
+        <button class="btn btn-green" style="padding:6px; font-size:11px; margin:0;" onclick="adminApproveTopup('${t.id}', '${t.customerId}', ${t.amount})">✅ Konfirmasi & Isi Saldo</button>
+      </div>
+    `).join('') : "Belum ada permohonan top up pending.";
+  });
+
+  // Rekap Pengguna & Saldo
+  db.ref('users').on('value', (snap) => {
+    let users = snap.val() ? Object.values(snap.val()) : [];
+    db.ref('wallets').once('value', (walSnap) => {
+      let wallets = walSnap.val() || {};
+      document.getElementById('adminUserList').innerHTML = users.length ? users.map(u => {
+        let bal = wallets[u.username] || 0;
+        let isSuspended = u.role === 'driver' && bal <= -25000;
+        let statusBadge = isSuspended ? '<b style="color:var(--red);">[SUSPENDED]</b>' : '<b style="color:var(--green);">[AKTIF]</b>';
+        return `
+          <div style="border-bottom:1px solid #334155; padding:6px 0;">
+            👤 <b>${u.username}</b> (${u.role}) ${statusBadge}<br>
+            Plat: <b>${u.platNomor || '-'}</b> | Saldo: <b style="color:${bal < 0 ? 'var(--red)' : 'var(--green)'}">Rp ${bal.toLocaleString('id-ID')}</b>
+          </div>
+        `;
+      }).join('') : "Belum ada pengguna terdaftar.";
+    });
+  });
+}
+
+function recordCashflow(type) {
+  let desc = document.getElementById('cashflowDescInput').value.trim();
+  let amount = parseInt(document.getElementById('cashflowAmountInput').value);
+
+  if (!desc || !amount || amount <= 0) return alert("Isi Keterangan dan Nominal yang Valid!");
+
+  const logId = "CF-" + Date.now().toString().slice(-6);
+  const logData = {
+    id: logId,
+    desc: desc,
+    amount: amount,
+    type: type,
+    createdAt: new Date().toLocaleString("id-ID")
+  };
+
+  db.ref('cashflow/' + logId).set(logData, () => {
+    alert(`✅ Catatan Arus Kas (${type === 'IN' ? 'Pemasukan' : 'Pengeluaran'}) Berhasil Disimpan!`);
+    document.getElementById('cashflowDescInput').value = "";
+    document.getElementById('cashflowAmountInput').value = "";
+  });
+}
+
+function adminApproveTopup(topupId, custId, amount) {
+  db.ref('wallets/' + custId).once('value', (snap) => {
+    let currentBal = snap.val() || 0;
+    db.ref('wallets/' + custId).set(currentBal + amount, () => {
+      db.ref('topupRequests/' + topupId).update({ status: 'APPROVED' }, () => {
+        const logId = "CF-" + Date.now().toString().slice(-6);
+        db.ref('cashflow/' + logId).set({
+          id: logId, desc: `Top Up Saldo (${custId})`, amount: amount, type: 'IN', createdAt: new Date().toLocaleString("id-ID")
+        });
+        alert("Top Up Berhasil Dikonfirmasi! Saldo & Buku Kas Diperbarui.");
+      });
+    });
+  });
+}
+
+function adjustBalanceManual(type) {
+  let targetUser = document.getElementById('targetUserInput').value.trim();
+  let amount = parseInt(document.getElementById('manualAmountInput').value);
+
+  if (!targetUser || !amount || amount <= 0) return alert("Isi Username Target dan Nominal yang Valid!");
+
+  db.ref('wallets/' + targetUser).once('value', (snap) => {
+    let currentBal = snap.val() || 0;
+    let newBal = type === 'ADD' ? (currentBal + amount) : (currentBal - amount);
+
+    db.ref('wallets/' + targetUser).set(newBal, () => {
+      const logId = "CF-" + Date.now().toString().slice(-6);
+      db.ref('cashflow/' + logId).set({
+        id: logId, desc: `Penyesuaian Saldo (${targetUser})`, amount: amount, type: type === 'ADD' ? 'IN' : 'OUT', createdAt: new Date().toLocaleString("id-ID")
+      });
+      alert(`✅ Saldo ${targetUser} Berhasil Diperbarui!\nSaldo Baru: Rp ${newBal.toLocaleString('id-ID')}`);
+      document.getElementById('manualAmountInput').value = "";
+    });
+  });
+}
+
+function initAdminLiveMap() {
+  if (adminLiveMap) return;
+  adminLiveMap = L.map('adminLiveMap').setView([-7.5463, 112.2338], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminLiveMap);
+
+  db.ref('activeDrivers').on('value', (snap) => {
+    let drivers = snap.val() || {};
+    Object.entries(drivers).forEach(([id, d]) => {
+      let markerKey = 'driver_' + id;
+      if (adminMarkers[markerKey]) { adminMarkers[markerKey].setLatLng([d.lat, d.lng]); } 
+      else {
+        let driverIcon = L.divIcon({ html: '🛵<br><b>' + d.driverId + '</b>', iconSize: [40, 40] });
+        adminMarkers[markerKey] = L.marker([d.lat, d.lng], { icon: driverIcon }).addTo(adminLiveMap).bindPopup("Mitra Driver: " + d.driverName);
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
